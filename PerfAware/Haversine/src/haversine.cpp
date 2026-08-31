@@ -114,7 +114,7 @@ struct JSONObject
 {
     char* Key = nullptr;
     JSONValue Value;
-    
+
     JSONObject* GetProperty(const char* Key);
     JSONObject* GetItem(int Idx);
 
@@ -281,7 +281,7 @@ JSONToken JSONParseContext::PeekNextToken()
 
             case '\0': { Token = JSONToken_End; } break;
 
-            default: { } break;
+            default: {} break;
         }
 
         if (Token != JSONToken_Unspecified) { break; }
@@ -306,7 +306,7 @@ char* JSONParseContext::ParseString()
     u64 EndQuoteIdx = ReadIdx;
 
     char* Result = nullptr;
-    if (ReadIdx < JSONContents.Size && 
+    if (ReadIdx < JSONContents.Size &&
         BeginQuoteIdx < EndQuoteIdx &&
         JSONContents.Contents[BeginQuoteIdx] == '"' &&
         JSONContents.Contents[EndQuoteIdx] == '"')
@@ -643,13 +643,14 @@ void FreeJSONRoot(JSONObject* Root)
     *Root = {};
 }
 
-double CalculateHaversineAverageFromJSON(JSONObject* Root)
+double CalculateHaversineAverageFromJSON(const char* JSONFileName)
 {
-    Assert(Root);
+    FileContentsT HvPairsFileText = ReadFileContents(JSONFileName, true);
+    JSONObject Root = JSONParse(HvPairsFileText);
 
     double HaversineSum = 0.0;
 
-    JSONObject* Pairs = Root->GetProperty("pairs");
+    JSONObject* Pairs = Root.GetProperty("pairs");
     Assert(Pairs && Pairs->Value.Type == JSONType_Array);
 
     for (int PairIdx = 0; PairIdx < Pairs->Value.List->Size; PairIdx++)
@@ -672,9 +673,11 @@ double CalculateHaversineAverageFromJSON(JSONObject* Root)
     return HaversineAvg;
 }
 
-int main(int ArgCount, const char **ArgValues)
+int main(int ArgCount, const char** ArgValues)
 {
-    u32 TestSeeds[] = {19854, 54285, 43745, 63179, 5897};
+    (void)ArgCount; (void)ArgValues;
+
+    u32 TestSeeds[] = { 19854, 54285, 43745, 63179, 5897 };
     bool bCluster = true;
     u32 Seed = TestSeeds[0];
     u32 Num = 10; //1000000;
@@ -682,10 +685,9 @@ int main(int ArgCount, const char **ArgValues)
     Args.Init(bCluster, Seed, Num);
     Args.Generate();
 
-    FileContentsT HvPairsFileText = ReadFileContents(Args.FileName_PairsJSON, true);
-    JSONObject Root = JSONParse(HvPairsFileText);
-
-    double HaversineAvg = CalculateHaversineAverageFromJSON(&Root);
+    double HaversineAvg = CalculateHaversineAverageFromJSON(Args.FileName_PairsJSON);
+    double Difference = HaversineAvg - Args.Average;
+    fprintf(stdout, "\n\n\nValidation:\n\tCalculated average: %.16f\n\tDifference: %.16f\n", HaversineAvg, Difference);
 
     return 0;
 }

@@ -31,10 +31,12 @@ struct HaversinePair
 
 struct HaversineArgs
 {
-    bool bCluster;
-    u32 Seed;
-    u32 Num;
+    bool bCluster = false;
+    u32 Seed = 0;
+    u32 Num = 0;
     std::mt19937 RNG;
+
+    f64 Average = 0.0;
 
     static constexpr int MaxFileNameLength = 128;
     char FileName_PairsJSON[MaxFileNameLength];
@@ -47,9 +49,9 @@ struct HaversineArgs
 
 namespace Reference
 {
-    f64 Square(f64 A);
-    f64 RadiansFromDegrees(f64 Degrees);
-    f64 CalculateHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1);
+f64 Square(f64 A);
+f64 RadiansFromDegrees(f64 Degrees);
+f64 CalculateHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1);
 } // namespace Reference
 
 #endif // HAVERSINE_COMMON_H
