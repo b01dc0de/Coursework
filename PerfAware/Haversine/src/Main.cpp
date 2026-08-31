@@ -135,6 +135,13 @@ struct JSONObject
     
     JSONObject* GetProperty(const char* Key);
     JSONObject* GetItem(int Idx);
+
+    DynamicArray<JSONObject*>& GetList();
+    char*& GetString();
+    s64& GetInt();
+    f64& GetFloat();
+    u64& GetBool();
+    bool IsNull();
 };
 
 JSONObject* JSONObject::GetProperty(const char* Key)
@@ -158,6 +165,41 @@ JSONObject* JSONObject::GetItem(int Idx)
     JSONObject* Result = nullptr;
     if (Idx < Value.List->Size) { Result = Value.List->Data[Idx]; }
     return Result;
+}
+
+DynamicArray<JSONObject*>& JSONObject::GetList()
+{
+    Assert(Value.Type == JSONType_Object || Value.Type == JSONType_Array);
+    return *Value.List;
+}
+
+char*& JSONObject::GetString()
+{
+    Assert(Value.Type == JSONType_String);
+    return Value.String;
+}
+
+s64& JSONObject::GetInt()
+{
+    Assert(Value.Type == JSONType_NumberInt);
+    return Value.NumberInt;
+}
+
+f64& JSONObject::GetFloat()
+{
+    Assert(Value.Type == JSONType_NumberFloat);
+    return Value.NumberFloat;
+}
+
+u64& JSONObject::GetBool()
+{
+    Assert(Value.Type == JSONType_Boolean);
+    return Value.Boolean;
+}
+
+bool JSONObject::IsNull()
+{
+    return Value.Type == JSONType_Null;
 }
 
 enum JSONToken
