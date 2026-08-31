@@ -858,7 +858,7 @@ constexpr int MaxFileNameLength = 128;
 
 void ConstructHvPairsFileName(GenerateHaversinePairsArgs *Args, char *OutFileName)
 {
-    sprintf_s(OutFileName, MaxFileNameLength, "output_pairs_Seed_%d_%s_%d.json", Args->Seed, Args->bCluster ? "clustered" : "uniform",
+    sprintf_s(OutFileName, MaxFileNameLength, "output/output_pairs_Seed_%d_%s_%d.json", Args->Seed, Args->bCluster ? "clustered" : "uniform",
             Args->Num);
 }
 
@@ -903,12 +903,41 @@ void GenerateHaversineOutput(GenerateHaversinePairsArgs *Args)
     delete[] HvPairs;
 }
 
+double CalculateHaversineAverageFromJSON(JSONObject* Root)
+{
+    Assert(Root);
+
+    double HaversineSum = 0.0;
+
+    JSONObject* Pairs = Root->GetProperty("pairs");
+    Assert(Pairs && Pairs->Value.Type == JSONType_Array);
+
+    for (int PairIdx = 0; PairIdx < Pairs->Value.List->Size; PairIdx++)
+    {
+        JSONObject* Pair = Pairs->GetItem(PairIdx);
+
+        JSONObject* X0 = Pair->GetProperty("X0");
+        JSONObject* Y0 = Pair->GetProperty("Y0");
+        JSONObject* X1 = Pair->GetProperty("X1");
+        JSONObject* Y1 = Pair->GetProperty("Y1");
+
+        Assert(X0 && Y0 && X1 && Y1);
+        Assert(X0->Value.Type == JSONType_NumberFloat && Y0->Value.Type == JSONType_NumberFloat &&
+            X1->Value.Type == JSONType_NumberFloat && Y1->Value.Type == JSONType_NumberFloat);
+
+        HaversineSum += Reference::CalculateHaversine(X0->GetFloat(), Y0->GetFloat(), X1->GetFloat(), Y1->GetFloat());
+    }
+
+    double HaversineAvg = HaversineSum / Pairs->Value.List->Size;
+    return HaversineAvg;
+}
+
 int main(int ArgCount, const char **ArgValues)
 {
     u32 TestSeeds[] = {19854, 54285, 43745, 63179, 5897};
     bool bCluster = true;
     u32 Seed = TestSeeds[0];
-    u32 Num = 10;//1000000;
+    u32 Num = 10; //1000000;
     GenerateHaversinePairsArgs Args{bCluster, Seed, Num, std::mt19937{Seed}};
     GenerateHaversineOutput(&Args);
 
@@ -917,7 +946,7 @@ int main(int ArgCount, const char **ArgValues)
     FileContentsT HvPairsFileText = ReadFileContents(HvPairsFileName, true);
     JSONObject Root = JSONParse(HvPairsFileText);
 
-    __debugbreak();
+    double HaversineAvg = CalculateHaversineAverageFromJSON(&Root);
 
     return 0;
 }
