@@ -139,7 +139,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\haversine.cpp" />
+    <ClCompile Include="src\haversine_common.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\haversine_common.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

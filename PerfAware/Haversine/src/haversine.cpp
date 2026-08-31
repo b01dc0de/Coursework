@@ -1,22 +1,4 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <random>
-
-using f32 = float;
-using f64 = double;
-
-using s8 = int8_t;
-using s16 = int16_t;
-using s32 = int32_t;
-using s64 = int64_t;
-
-using u8 = uint8_t;
-using u16 = uint16_t;
-using u32 = uint32_t;
-using u64 = uint64_t;
-
-#define Assert(Exp) if (!(Exp)) { __debugbreak(); }
+#include "haversine_common.h"
 
 template <typename T>
 struct DynamicArray
@@ -661,179 +643,6 @@ void FreeJSONRoot(JSONObject* Root)
     *Root = {};
 }
 
-namespace Reference
-{
-    f64 Square(f64 A);
-    f64 RadiansFromDegrees(f64 Degrees);
-    f64 CalculateHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1);
-} // namespace Reference
-
-struct HaversinePair
-{
-    f64 X0;
-    f64 Y0;
-    f64 X1;
-    f64 Y1;
-};
-
-struct GenerateHaversinePairsArgs
-{
-    bool bCluster;
-    u32 Seed;
-    u32 Num;
-    std::mt19937 RNG;
-
-    f64 Average;
-};
-
-HaversinePair *GenerateHaversinePairs(GenerateHaversinePairsArgs *Args)
-{
-    HaversinePair *Output = new HaversinePair[Args->Num];
-
-    constexpr f64 MinX = -180.0;
-    constexpr f64 MaxX = +180.0;
-    constexpr f64 MinY = -90.0;
-    constexpr f64 MaxY = +90.0;
-
-    constexpr u32 NumClusters = 8;
-    constexpr f64 ClusterOffsetRangeX = MaxX / 16.0;
-    constexpr f64 ClusterOffsetRangeY = MaxY / 16.0;
-
-    std::uniform_real_distribution<f64> X_Dist{MinX, MaxX};
-    std::uniform_real_distribution<f64> Y_Dist{MinY, MaxY};
-
-    std::uniform_int_distribution<u32> Cluster_Dist{0, NumClusters - 1};
-    std::uniform_real_distribution<f64> ClusterOffsetX_Dist{-ClusterOffsetRangeX, +ClusterOffsetRangeX};
-    std::uniform_real_distribution<f64> ClusterOffsetY_Dist{-ClusterOffsetRangeY, +ClusterOffsetRangeY};
-
-    auto Clamp = [](f64 X, f64 A, f64 B) -> f64
-    {
-        if (X < A)
-            return A;
-        if (X > B)
-            return B;
-        return X;
-    };
-
-    if (Args->bCluster)
-    {
-        double ClusterXs[NumClusters] = {};
-        double ClusterYs[NumClusters] = {};
-        for (int ClusterIdx = 0; ClusterIdx < NumClusters; ClusterIdx++)
-        {
-            ClusterXs[ClusterIdx] = Clamp(X_Dist(Args->RNG), MinX + ClusterOffsetRangeX, MaxX - ClusterOffsetRangeX);
-            ClusterYs[ClusterIdx] = Clamp(Y_Dist(Args->RNG), MinY + ClusterOffsetRangeY, MaxY - ClusterOffsetRangeY);
-        }
-
-        for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
-        {
-            u32 ClusterIdx0 = Cluster_Dist(Args->RNG);
-            u32 ClusterIdx1 = Cluster_Dist(Args->RNG);
-
-            Output[PairIdx].X0 = ClusterXs[ClusterIdx0] + ClusterOffsetX_Dist(Args->RNG);
-            Output[PairIdx].Y0 = ClusterYs[ClusterIdx0] + ClusterOffsetY_Dist(Args->RNG);
-
-            Output[PairIdx].X1 = ClusterXs[ClusterIdx1] + ClusterOffsetX_Dist(Args->RNG);
-            Output[PairIdx].Y1 = ClusterYs[ClusterIdx1] + ClusterOffsetY_Dist(Args->RNG);
-        }
-    }
-    else
-    {
-        for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
-        {
-            Output[PairIdx].X0 = X_Dist(Args->RNG);
-            Output[PairIdx].Y0 = Y_Dist(Args->RNG);
-            Output[PairIdx].X1 = X_Dist(Args->RNG);
-            Output[PairIdx].Y1 = Y_Dist(Args->RNG);
-        }
-    }
-
-    return Output;
-}
-
-constexpr int MaxFileNameLength = 128;
-
-void ConstructHvPairsFileName(GenerateHaversinePairsArgs *Args, const char* Prefix, const char* Extension, char* OutFileName)
-{
-    sprintf_s(OutFileName, MaxFileNameLength, "output/%s_Seed_%d_%s_%d.%s", Prefix, Args->Seed, Args->bCluster ? "clustered" : "uniform", Args->Num, Extension);
-}
-
-void WriteHaversinePairsToFileJSON(GenerateHaversinePairsArgs *Args, HaversinePair *HvPairs)
-{
-    char OutputFileName[MaxFileNameLength];
-    ConstructHvPairsFileName(Args, "output_pairs", "json", OutputFileName);
-
-    FILE* OutputFile = nullptr;
-    fopen_s(&OutputFile, OutputFileName, "w+");
-    if (OutputFile)
-    {
-        fprintf(OutputFile, "{\"pairs\":[\n");
-        for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
-        {
-            fprintf(OutputFile, "\t{\"X0\":%.16f, \"Y0\":%.16f, \"X1\":%.16f, \"Y1\":%.16f}%s\n", HvPairs[PairIdx].X0,
-                    HvPairs[PairIdx].Y0, HvPairs[PairIdx].X1, HvPairs[PairIdx].Y1, PairIdx < Args->Num - 1 ? "," : "");
-        }
-        fprintf(OutputFile, "]}");
-        fclose(OutputFile);
-    }
-
-    fprintf(stdout, "Wrote haversine pairs to %s\n", OutputFileName);
-}
-
-void WriteHaversineAnswersToFile(GenerateHaversinePairsArgs* Args, f64* HvAnswers)
-{
-    char AnswersJSONFileName[MaxFileNameLength];
-    ConstructHvPairsFileName(Args, "answers", "json", AnswersJSONFileName);
-    char AnswersBinaryFileName[MaxFileNameLength];
-    ConstructHvPairsFileName(Args, "answers", "f64", AnswersBinaryFileName);
-
-    FILE* JSONOutputFile = nullptr;
-    fopen_s(&JSONOutputFile, AnswersJSONFileName, "w+b");
-    FILE* BinaryOutputFile = nullptr;
-    fopen_s(&BinaryOutputFile, AnswersBinaryFileName, "w+b");
-
-    if (JSONOutputFile && BinaryOutputFile)
-    {
-        fprintf(JSONOutputFile, "{\"pairs\":[\n");
-        for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
-        {
-            fprintf(JSONOutputFile, "\t{\"answer\":%.16f}%s\n", HvAnswers[PairIdx], PairIdx < Args->Num - 1 ? "," : "");
-        }
-        fprintf(JSONOutputFile, "]}");
-        fclose(JSONOutputFile);
-
-        fwrite(HvAnswers, sizeof(f64), Args->Num, BinaryOutputFile);
-        fclose(BinaryOutputFile);
-    }
-
-    fprintf(stdout, "Wrote haversine answers to %s, %s\n", AnswersJSONFileName, AnswersBinaryFileName);
-}
-
-void GenerateHaversineOutput(GenerateHaversinePairsArgs *Args)
-{
-    HaversinePair *HvPairs = GenerateHaversinePairs(Args);
-    f64* HvAnswers = new f64[Args->Num];
-
-    double HaversineSum = 0.0;
-    for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
-    {
-        f64 PairHaversine = Reference::CalculateHaversine(HvPairs[PairIdx].X0, HvPairs[PairIdx].Y0, HvPairs[PairIdx].X1, HvPairs[PairIdx].Y1);
-        HaversineSum += PairHaversine;
-        HvAnswers[PairIdx] = PairHaversine;
-    }
-    double HaversineAvg = HaversineSum / Args->Num;
-
-    fprintf(stdout, "Generation:\n");
-    fprintf(stdout, "\tSeed: %d\n\t# Pairs: %d (%s)\n", Args->Seed, Args->Num, Args->bCluster ? "clustered" : "uniform");
-    fprintf(stdout, "\tReference Sum: %f\n", HaversineSum);
-    fprintf(stdout, "\tReference average: %f\n", HaversineAvg);
-    WriteHaversinePairsToFileJSON(Args, HvPairs);
-    WriteHaversineAnswersToFile(Args, HvAnswers);
-
-    delete[] HvAnswers;
-    delete[] HvPairs;
-}
-
 double CalculateHaversineAverageFromJSON(JSONObject* Root)
 {
     Assert(Root);
@@ -869,59 +678,15 @@ int main(int ArgCount, const char **ArgValues)
     bool bCluster = true;
     u32 Seed = TestSeeds[0];
     u32 Num = 10; //1000000;
-    GenerateHaversinePairsArgs Args{bCluster, Seed, Num, std::mt19937{Seed}};
-    GenerateHaversineOutput(&Args);
+    HaversineArgs Args = {};
+    Args.Init(bCluster, Seed, Num);
+    Args.Generate();
 
-    char HvPairsFileName[MaxFileNameLength];
-    ConstructHvPairsFileName(&Args, "output_pairs", "json", HvPairsFileName);
-    FileContentsT HvPairsFileText = ReadFileContents(HvPairsFileName, true);
+    FileContentsT HvPairsFileText = ReadFileContents(Args.FileName_PairsJSON, true);
     JSONObject Root = JSONParse(HvPairsFileText);
 
     double HaversineAvg = CalculateHaversineAverageFromJSON(&Root);
 
     return 0;
 }
-
-namespace Reference
-{
-    /*
-     * NOTE(CKA): The following code was taken as reference code from
-     *      https://github.com/cmuratori/computer_enhance/blob/main/perfaware/part2/listing_0065_haversine_formula.cpp
-     *      as part of the Performance-Aware Programming Coursework available at https://www.computerenhance.com
-     */
-
-    f64 Square(f64 A)
-    {
-        f64 Result = (A * A);
-        return Result;
-    }
-
-    f64 RadiansFromDegrees(f64 Degrees)
-    {
-        f64 Result = 0.01745329251994329577 * Degrees;
-        return Result;
-    }
-
-    f64 CalculateHaversine(f64 X0, f64 Y0, f64 X1, f64 Y1)
-    {
-        constexpr double EarthRadius = 6372.8;
-
-        f64 lat1 = Y0;
-        f64 lat2 = Y1;
-        f64 lon1 = X0;
-        f64 lon2 = X1;
-
-        f64 dLat = RadiansFromDegrees(lat2 - lat1);
-        f64 dLon = RadiansFromDegrees(lon2 - lon1);
-        lat1 = RadiansFromDegrees(lat1);
-        lat2 = RadiansFromDegrees(lat2);
-
-        f64 a = Square(sin(dLat / 2.0)) + cos(lat1) * cos(lat2) * Square(sin(dLon / 2));
-        f64 c = 2.0 * asin(sqrt(a));
-
-        f64 Result = EarthRadius * c;
-
-        return Result;
-    }
-} // namespace Reference
 
