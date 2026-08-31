@@ -132,7 +132,33 @@ struct JSONObject
 {
     char* Key = nullptr;
     JSONValue Value;
+    
+    JSONObject* GetProperty(const char* Key);
+    JSONObject* GetItem(int Idx);
 };
+
+JSONObject* JSONObject::GetProperty(const char* Key)
+{
+    Assert(Value.Type == JSONType_Object && Value.List && Key);
+
+    JSONObject* Result = nullptr;
+
+    for (int Idx = 0; Key && Idx < Value.List->Size; Idx++)
+    {
+        if (strcmp(Key, Value.List->Data[Idx]->Key) == 0) { Result = Value.List->Data[Idx]; break; }
+    }
+
+    return Result;
+}
+
+JSONObject* JSONObject::GetItem(int Idx)
+{
+    Assert(Value.Type == JSONType_Array && Value.List && Idx < Value.List->Size);
+
+    JSONObject* Result = nullptr;
+    if (Idx < Value.List->Size) { Result = Value.List->Data[Idx]; }
+    return Result;
+}
 
 enum JSONToken
 {
@@ -158,7 +184,7 @@ struct JSONObjectStack
     bool IsEmpty() { return Stack.Size == 0; }
     void Push(JSONObject* NewObject) { Stack.Add(NewObject); }
     void Pop() { Assert(!IsEmpty()); if (!IsEmpty()) { Stack[Stack.Size - 1] = {}; Stack.Size--; } }
-    JSONObject* Top() { JSONObject* Result = nullptr; if (!IsEmpty()) { return Stack[Stack.Size - 1]; } }
+    JSONObject* Top() { JSONObject* Result = nullptr; if (!IsEmpty()) { Result = Stack[Stack.Size - 1]; } return Result; }
 };
 
 struct JSONParseContext
@@ -476,28 +502,26 @@ void JSONParseContext::ParseToken()
     switch (Token)
     {
         case JSONToken_LeftCurly:
+        case JSONToken_LeftSquare:
         {
-            // Case A: Root object
-            if (Stack.IsEmpty()) { Stack.Push(&Root); }
-            // Case B: New object within another object
+            if (Stack.IsEmpty() && Token == JSONToken_LeftCurly) { Stack.Push(&Root); }
             else if (Stack.Top() && Stack.Top()->Value.Type == JSONType_Object)
             {
                 JSONObject* Last = Stack.Top()->Value.List->Last();
                 if (Last != nullptr && bColon && Last->Value.Type == JSONType_Unspecified)
                 {
-                    Last->Value.Type = JSONType_Object;
+                    Last->Value.Type = Token == JSONToken_LeftCurly ? JSONType_Object : JSONType_Array;
                     Last->Value.List = new DynamicArray<JSONObject*>{};
                     Stack.Push(Last);
                 }
                 else { Assert(false); bError = true; }
             }
-            // Case C: New object within array
             else if (Stack.Top() && Stack.Top()->Value.Type == JSONType_Array)
             {
                 if (!bColon && (Stack.Top()->Value.List->Size == 0 || bComma))
                 {
                     JSONObject* NewObject = new JSONObject{ };
-                    NewObject->Value.Type = JSONType_Object;
+                    NewObject->Value.Type = Token == JSONToken_LeftCurly ? JSONType_Object : JSONType_Array;
                     NewObject->Value.List = new DynamicArray<JSONObject*>{};
                     Stack.Top()->Value.List->Add(NewObject);
                     Stack.Push(NewObject);
@@ -513,38 +537,7 @@ void JSONParseContext::ParseToken()
             if (!Stack.IsEmpty() && Stack.Top()->Value.Type == JSONType_Object) { Stack.Pop(); }
             else { Assert(false); bError = true; }
             ReadIdx++;
-            if (Stack.IsEmpty()) { bEnd = true; }
-        } break;
-
-        case JSONToken_LeftSquare:
-        {
-            if (!Stack.IsEmpty() && Stack.Top() && Stack.Top()->Value.Type == JSONType_Object)
-            {
-                JSONObject* Last = Stack.Top()->Value.List->Last();
-                if (Last != nullptr && bColon && Last->Value.Type == JSONType_Unspecified)
-                {
-                    Last->Value.Type = JSONType_Array;
-                    Last->Value.List = new DynamicArray<JSONObject*>{};
-                    Stack.Push(Last);
-                }
-                else { Assert(false); bError = true; }
-            }
-            else if (!Stack.IsEmpty() && Stack.Top() && Stack.Top()->Value.Type == JSONType_Array)
-            {
-                if (Stack.Top()->Key == nullptr && !bColon &&
-                    (Stack.Top()->Value.List->Size == 0 || bComma))
-                {
-                    JSONObject* NewObject = new JSONObject{ };
-                    NewObject->Value.Type = JSONType_Array;
-                    NewObject->Value.List = new DynamicArray<JSONObject*>{};
-                    Stack.Top()->Value.List->Add(NewObject);
-                    Stack.Push(NewObject);
-                }
-                else { Assert(false); bError = true; }
-            }
-            else { Assert(false); bError = true; }
-
-            ReadIdx++;
+            if (Stack.IsEmpty()) { bEnd = true; } // Mark end if root object is closed
         } break;
 
         case JSONToken_RightSquare:
