@@ -676,6 +676,54 @@ JSONObject JSONParse(FileContentsT JSONContents)
     return Context.Root;
 }
 
+void FreeJSONObject(JSONObject* Object)
+{
+    if (!Object) { return; }
+
+    if (Object->Key) { delete[] Object->Key; }
+    switch (Object->Value.Type)
+    {
+        case JSONType_Object:
+        case JSONType_Array:
+        {
+            for (int Idx = 0; Idx < Object->Value.List->Size; Idx++) { FreeJSONObject(Object->Value.List->Data[Idx]); }
+            delete Object->Value.List;
+        } break;
+
+        case JSONType_String:
+        {
+            if (Object->Value.String) { delete[] Object->Value.String; }
+        } break;
+
+        case JSONType_NumberInt:
+        case JSONType_NumberFloat:
+        case JSONType_Boolean:
+        case JSONType_Null:
+        {
+        } break;
+
+        case JSONType_Unspecified:
+        case JSONType_Error:
+        default:
+        {
+            Assert(false);
+        } break;
+    }
+    delete Object;
+}
+
+void FreeJSONRoot(JSONObject* Root)
+{
+    if (!Root) { return; }
+
+    for (int Idx = 0; Root->Value.List && Idx < Root->Value.List->Size; Idx++)
+    {
+        FreeJSONObject(Root->Value.List->Data[Idx]);
+    }
+    delete Root->Value.List;
+    *Root = {};
+}
+
 namespace Reference
 {
     f64 Square(f64 A);
