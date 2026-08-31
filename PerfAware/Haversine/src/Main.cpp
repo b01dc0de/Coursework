@@ -243,15 +243,6 @@ struct JSONParseContext
     bool bColon;
     bool bComma;
 
-#define ENABLE_DEBUG_STREAM() (_DEBUG && 0)
-#if ENABLE_DEBUG_STREAM()
-    DynamicArray<JSONToken> Debug_TokenStream;
-    DynamicArray<JSONValue> Debug_ValueStream;
-
-    void Debug_PrintToken(int& TokenIdx, int& ValueIdx);
-    void Debug_PrintStream();
-#endif // ENABLE_DEBUG_STREAM()
-
     bool IsCharValidNumber(char X);
 
     JSONToken PeekNextToken();
@@ -261,85 +252,6 @@ struct JSONParseContext
 
     void ParseToken();
 };
-
-#if ENABLE_DEBUG_STREAM()
-void JSONParseContext::Debug_PrintToken(int& TokenIdx, int& ValueIdx)
-{
-    if (TokenIdx < Debug_TokenStream.Size)
-    {
-        JSONToken Token = Debug_TokenStream[TokenIdx];
-        switch (Token)
-        {
-            case JSONToken_LeftCurly: { printf("{\n"); } break;
-            case JSONToken_RightCurly: { printf("}\n"); } break;
-            case JSONToken_LeftSquare: { printf("[\n"); } break;
-            case JSONToken_RightSquare: { printf("]\n"); } break;
-            case JSONToken_Colon: { printf(":\n"); } break;
-            case JSONToken_Comma: { printf(",\n"); } break;
-
-            case JSONToken_String:
-            {
-                Assert(ValueIdx < Debug_ValueStream.Size);
-                Assert(JSONType_String == Debug_ValueStream[ValueIdx].Type);
-                char* ValueString = Debug_ValueStream[ValueIdx].String;
-                printf("String -> \"%s\"\n", ValueString);
-                ValueIdx++;
-            } break;
-            case JSONToken_Number:
-            {
-                Assert(ValueIdx < Debug_ValueStream.Size);
-                JSONType Type = Debug_ValueStream[ValueIdx].Type;
-                if (Type == JSONType_NumberInt)
-                {
-                    s64 ValueNumberInt = Debug_ValueStream[ValueIdx].NumberInt;
-                    printf("NumberInt -> %lld\n", ValueNumberInt);
-                }
-                else if (Type == JSONType_NumberFloat)
-                {
-                    f64 ValueNumberFloat = Debug_ValueStream[ValueIdx].NumberFloat;
-                    printf("NumberFloat -> %f\n", ValueNumberFloat);
-                }
-                else { Assert(false); }
-                ValueIdx++;
-            } break;
-            case JSONToken_LiteralBoolean:
-            {
-                Assert(ValueIdx < Debug_ValueStream.Size);
-                Assert(Debug_ValueStream[ValueIdx].Type == JSONType_Boolean);
-                printf("Boolean -> %s\n", Debug_ValueStream[ValueIdx].Boolean ? "true" : "false");
-                ValueIdx++;
-            } break;
-            case JSONToken_LiteralNull:
-            {
-                Assert(ValueIdx < Debug_ValueStream.Size);
-                Assert(Debug_ValueStream[ValueIdx].Type == JSONType_Null);
-                printf("Null\n");
-                ValueIdx++;
-            } break;
-
-            case JSONToken_Error: { printf("Token_Error\n"); } break;
-            case JSONToken_End: { printf("Token_End\n"); } break;
-
-            case JSONToken_Unspecified:
-            default:
-            {
-                Assert(false);
-            } break;
-        }
-
-        TokenIdx++;
-    }
-}
-void JSONParseContext::Debug_PrintStream()
-{
-    int TokenIdx = 0;
-    int ValueIdx = 0;
-    while (TokenIdx < Debug_TokenStream.Size)
-    {
-        Debug_PrintToken(TokenIdx, ValueIdx);
-    }
-}
-#endif // ENABLE_DEBUG_STREAM()
 
 bool JSONParseContext::IsCharValidNumber(char X)
 {
@@ -640,11 +552,6 @@ void JSONParseContext::ParseToken()
             }
             else { Assert(false); bError = true; }
             if (bError) { delete[] NewString; }
-        #if ENABLE_DEBUG_STREAM()
-            JSONValue Debug_JSONString = { JSONType_String };
-            Debug_JSONString.String = NewString;
-            Debug_ValueStream.Add(Debug_JSONString);
-        #endif ENABLE_DEBUG_STREAM()
         } break;
 
         case JSONToken_Number:
@@ -672,9 +579,6 @@ void JSONParseContext::ParseToken()
                 else { Assert(false); bError = true; }
             }
             else { Assert(false); bError = true; }
-        #if ENABLE_DEBUG_STREAM()
-            Debug_ValueStream.Add(NewValue);
-        #endif ENABLE_DEBUG_STREAM()
         } break;
 
         case JSONToken_End: { bEnd = true; } break;
@@ -686,11 +590,6 @@ void JSONParseContext::ParseToken()
 
     bColon = Token == JSONToken_Colon;
     bComma = Token == JSONToken_Comma;
-
-#if ENABLE_DEBUG_STREAM()
-    Debug_TokenStream.Add(Token);
-    if (bError) { Debug_TokenStream.Add(JSONToken_Error); }
-#endif // ENABLE_DEBUG_PARSE_STREAM()
 }
 
 JSONObject JSONParse(FileContentsT JSONContents)
@@ -710,10 +609,6 @@ JSONObject JSONParse(FileContentsT JSONContents)
     {
         Context.ParseToken();
     }
-
-#if ENABLE_DEBUG_STREAM()
-    Context.Debug_PrintStream();
-#endif // ENABLE_DEBUG_STREAM()
 
     return Context.Root;
 }
