@@ -682,6 +682,8 @@ struct GenerateHaversinePairsArgs
     u32 Seed;
     u32 Num;
     std::mt19937 RNG;
+
+    f64 Average;
 };
 
 HaversinePair *GenerateHaversinePairs(GenerateHaversinePairsArgs *Args)
@@ -751,17 +753,15 @@ HaversinePair *GenerateHaversinePairs(GenerateHaversinePairsArgs *Args)
 
 constexpr int MaxFileNameLength = 128;
 
-void ConstructHvPairsFileName(GenerateHaversinePairsArgs *Args, char *OutFileName)
+void ConstructHvPairsFileName(GenerateHaversinePairsArgs *Args, const char* Prefix, const char* Extension, char* OutFileName)
 {
-    sprintf_s(OutFileName, MaxFileNameLength, "output/output_pairs_Seed_%d_%s_%d.json", Args->Seed, Args->bCluster ? "clustered" : "uniform",
-            Args->Num);
+    sprintf_s(OutFileName, MaxFileNameLength, "output/%s_Seed_%d_%s_%d.%s", Prefix, Args->Seed, Args->bCluster ? "clustered" : "uniform", Args->Num, Extension);
 }
 
 void WriteHaversinePairsToFileJSON(GenerateHaversinePairsArgs *Args, HaversinePair *HvPairs)
 {
     char OutputFileName[MaxFileNameLength];
-    ConstructHvPairsFileName(Args, OutputFileName);
-    printf("Writing haversine pairs to %s\n", OutputFileName);
+    ConstructHvPairsFileName(Args, "output_pairs", "json", OutputFileName);
 
     FILE* OutputFile = nullptr;
     fopen_s(&OutputFile, OutputFileName, "w+");
@@ -776,25 +776,61 @@ void WriteHaversinePairsToFileJSON(GenerateHaversinePairsArgs *Args, HaversinePa
         fprintf(OutputFile, "]}");
         fclose(OutputFile);
     }
+
+    fprintf(stdout, "Wrote haversine pairs to %s\n", OutputFileName);
+}
+
+void WriteHaversineAnswersToFile(GenerateHaversinePairsArgs* Args, f64* HvAnswers)
+{
+    char AnswersJSONFileName[MaxFileNameLength];
+    ConstructHvPairsFileName(Args, "answers", "json", AnswersJSONFileName);
+    char AnswersBinaryFileName[MaxFileNameLength];
+    ConstructHvPairsFileName(Args, "answers", "f64", AnswersBinaryFileName);
+
+    FILE* JSONOutputFile = nullptr;
+    fopen_s(&JSONOutputFile, AnswersJSONFileName, "w+b");
+    FILE* BinaryOutputFile = nullptr;
+    fopen_s(&BinaryOutputFile, AnswersBinaryFileName, "w+b");
+
+    if (JSONOutputFile && BinaryOutputFile)
+    {
+        fprintf(JSONOutputFile, "{\"pairs\":[\n");
+        for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
+        {
+            fprintf(JSONOutputFile, "\t{\"answer\":%.16f}%s\n", HvAnswers[PairIdx], PairIdx < Args->Num - 1 ? "," : "");
+        }
+        fprintf(JSONOutputFile, "]}");
+        fclose(JSONOutputFile);
+
+        fwrite(HvAnswers, sizeof(f64), Args->Num, BinaryOutputFile);
+        fclose(BinaryOutputFile);
+    }
+
+    fprintf(stdout, "Wrote haversine answers to %s, %s\n", AnswersJSONFileName, AnswersBinaryFileName);
 }
 
 void GenerateHaversineOutput(GenerateHaversinePairsArgs *Args)
 {
-    printf("Generating %d %s haversine pairs (seed: %d)\n", Args->Num, Args->bCluster ? "clustered" : "uniform",
-           Args->Seed);
     HaversinePair *HvPairs = GenerateHaversinePairs(Args);
+    f64* HvAnswers = new f64[Args->Num];
 
     double HaversineSum = 0.0;
     for (int PairIdx = 0; PairIdx < Args->Num; PairIdx++)
     {
-        HaversineSum += Reference::CalculateHaversine(HvPairs[PairIdx].X0, HvPairs[PairIdx].Y0, HvPairs[PairIdx].X1,
-                                                      HvPairs[PairIdx].Y1);
+        f64 PairHaversine = Reference::CalculateHaversine(HvPairs[PairIdx].X0, HvPairs[PairIdx].Y0, HvPairs[PairIdx].X1, HvPairs[PairIdx].Y1);
+        HaversineSum += PairHaversine;
+        HvAnswers[PairIdx] = PairHaversine;
     }
     double HaversineAvg = HaversineSum / Args->Num;
-    printf("Calculated Haversine Sum: %f\n", HaversineAvg);
 
+    fprintf(stdout, "Generation:\n");
+    fprintf(stdout, "\tSeed: %d\n\t# Pairs: %d (%s)\n", Args->Seed, Args->Num, Args->bCluster ? "clustered" : "uniform");
+    fprintf(stdout, "\tReference Sum: %f\n", HaversineSum);
+    fprintf(stdout, "\tReference average: %f\n", HaversineAvg);
     WriteHaversinePairsToFileJSON(Args, HvPairs);
+    WriteHaversineAnswersToFile(Args, HvAnswers);
 
+    delete[] HvAnswers;
     delete[] HvPairs;
 }
 
@@ -837,7 +873,7 @@ int main(int ArgCount, const char **ArgValues)
     GenerateHaversineOutput(&Args);
 
     char HvPairsFileName[MaxFileNameLength];
-    ConstructHvPairsFileName(&Args, HvPairsFileName);
+    ConstructHvPairsFileName(&Args, "output_pairs", "json", HvPairsFileName);
     FileContentsT HvPairsFileText = ReadFileContents(HvPairsFileName, true);
     JSONObject Root = JSONParse(HvPairsFileText);
 
