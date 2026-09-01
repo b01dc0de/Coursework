@@ -6,6 +6,10 @@
 #include <string.h>
 #include <random>
 
+#include <intrin.h>
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
 using f32 = float;
 using f64 = double;
 
@@ -46,6 +50,11 @@ struct HaversineArgs
     void Init(bool _bCluster, u32 _Seed, u32 _Num);
     void Generate();
 };
+
+u64 GetOSTimerFreq();
+u64 ReadOSTimer();
+inline u64 ReadCPUTimer() { return __rdtsc(); }
+u64 EstimateCPUTimerFreq();
 
 namespace Reference
 {

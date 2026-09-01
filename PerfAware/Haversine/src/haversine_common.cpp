@@ -7,14 +7,14 @@ void HaversineArgs::Init(bool _bCluster, u32 _Seed, u32 _Num)
     Num = _Num;
     RNG = std::mt19937{ Seed };
 
-#define HvArgs_BaseFileNameFmt "output/%s_Seed_%d_%s_%d.%s"
-#define HvArgs_PairsPrefix "output_pairs"
-#define HvArgs_AnswersPrefix "answers"
-#define HvArgs_ExtensionJSON "json"
-#define HvArgs_ExtensionBinary "f64"
-    sprintf_s(FileName_PairsJSON, MaxFileNameLength, HvArgs_BaseFileNameFmt, HvArgs_PairsPrefix, Seed, bCluster ? "clustered" : "uniform", Num, HvArgs_ExtensionJSON);
-    sprintf_s(FileName_AnswersJSON, MaxFileNameLength, HvArgs_BaseFileNameFmt, HvArgs_AnswersPrefix, Seed, bCluster ? "clustered" : "uniform", Num, HvArgs_ExtensionJSON);
-    sprintf_s(FileName_AnswersBinary, MaxFileNameLength, HvArgs_BaseFileNameFmt, HvArgs_AnswersPrefix, Seed, bCluster ? "clustered" : "uniform", Num, HvArgs_ExtensionBinary);
+    constexpr const char* BaseFileNameFmt = "output/%s_Seed_%d_%s_%d.%s";
+    constexpr const char* PairsPrefix = "output_pairs";
+    constexpr const char* AnswersPrefix = "answers";
+    constexpr const char* ExtensionJSON = "json";
+    constexpr const char* ExtensionBinary = "f64";
+    sprintf_s(FileName_PairsJSON, MaxFileNameLength, BaseFileNameFmt, PairsPrefix, Seed, bCluster ? "clustered" : "uniform", Num, ExtensionJSON);
+    sprintf_s(FileName_AnswersJSON, MaxFileNameLength, BaseFileNameFmt, AnswersPrefix, Seed, bCluster ? "clustered" : "uniform", Num, ExtensionJSON);
+    sprintf_s(FileName_AnswersBinary, MaxFileNameLength, BaseFileNameFmt, AnswersPrefix, Seed, bCluster ? "clustered" : "uniform", Num, ExtensionBinary);
 }
 
 void WriteHaversineOutputToFile(HaversineArgs* Args, HaversinePair* HvPairs, f64* HvAnswers)
@@ -147,6 +147,63 @@ void HaversineArgs::Generate()
 
     delete[] HvPairs;
     delete[] HvAnswers;
+}
+
+u64 GetOSTimerFreq()
+{
+    LARGE_INTEGER Freq;
+    QueryPerformanceFrequency(&Freq);
+    return Freq.QuadPart;
+}
+
+u64 ReadOSTimer()
+{
+    LARGE_INTEGER Timestamp;
+    QueryPerformanceCounter(&Timestamp);
+    return Timestamp.QuadPart;
+}
+
+// NOTE(CKA): Code for EstimateCPUTimerFreq is taken from
+//      listing_0073_cpu_timer_guessfreq_main.cpp from PerfAware coursework
+u64 EstimateCPUTimerFreq()
+{
+    u64 MsToWait = 100;
+    u64 OSFreq = GetOSTimerFreq();
+
+    u64 CPUStart = ReadCPUTimer();
+    u64 OSStart = ReadOSTimer();
+    u64 OSEnd = 0;
+    u64 OSElapsed = 0;
+    u64 OSWaitTime = OSFreq * MsToWait / 1000;
+    while (OSElapsed < OSWaitTime)
+    {
+        OSEnd = ReadOSTimer();
+        OSElapsed = OSEnd - OSStart;
+    }
+
+    u64 CPUEnd = ReadCPUTimer();
+    u64 CPUElapsed = CPUEnd - CPUStart;
+
+    u64 CPUFreq = 0;
+    if (OSElapsed)
+    {
+        CPUFreq = OSFreq * CPUElapsed / OSElapsed;
+    }
+
+    constexpr bool bPrintEstimateResults = false;
+    if (bPrintEstimateResults)
+    {
+        printf("EstimateCPUTimerFreq:\n");
+        printf("    OS Freq: %llu (reported)\n", OSFreq);
+
+        printf("   OS Timer: %llu -> %llu = %llu elapsed\n", OSStart, OSEnd, OSElapsed);
+        printf(" OS Seconds: %.4f\n", (f64)OSElapsed / (f64)OSFreq);
+
+        printf("  CPU Timer: %llu -> %llu = %llu elapsed\n", CPUStart, CPUEnd, CPUElapsed);
+        printf("   CPU Freq: %llu (guessed)\n\n", CPUFreq);
+    }
+
+    return CPUFreq;
 }
 
 namespace Reference
