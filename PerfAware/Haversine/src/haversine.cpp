@@ -82,6 +82,15 @@ FileContentsT ReadFileContents(const char* FileName, bool bAppendZero)
     return Result;
 }
 
+void FreeFileContents(FileContentsT* InFileContents)
+{
+    if (InFileContents)
+    {
+        delete[] InFileContents->Contents;
+        *InFileContents = {};
+    }
+}
+
 enum JSONType
 {
     JSONType_Unspecified,
@@ -670,6 +679,10 @@ double CalculateHaversineAverageFromJSON(const char* JSONFileName)
     }
 
     double HaversineAvg = HaversineSum / Pairs->Value.List->Size;
+
+    FreeFileContents(&HvPairsFileText);
+    FreeJSONRoot(&Root);
+
     return HaversineAvg;
 }
 
