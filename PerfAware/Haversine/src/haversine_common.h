@@ -23,7 +23,11 @@ using u16 = uint16_t;
 using u32 = uint32_t;
 using u64 = uint64_t;
 
+#if _DEBUG
 #define Assert(Exp) if (!(Exp)) { __debugbreak(); }
+#else
+#define Assert(Exp) (void)0
+#endif // _DEBUG
 
 struct HaversinePair
 {
@@ -55,6 +59,38 @@ u64 GetOSTimerFreq();
 u64 ReadOSTimer();
 inline u64 ReadCPUTimer() { return __rdtsc(); }
 u64 EstimateCPUTimerFreq();
+
+struct BlockTiming
+{
+    const char* Name;
+    u64 Begin;
+    u64 End;
+};
+
+struct ScopedTiming
+{
+    u64 ID;
+
+    ScopedTiming(const char* _Name);
+    ~ScopedTiming();
+};
+
+struct Perf
+{
+    static constexpr u64 MaxBlockTimings = 1024;
+    static BlockTiming Total;
+    static BlockTiming Timings[MaxBlockTimings];
+    static u64 Count;
+
+    static void BeginProfiling();
+    static void EndProfiling();
+    static u64 BeginTiming(const char* Name);
+    static void EndTiming(u64 ID);
+    static void PrintTimings();
+};
+
+#define TimeBlock(BlockName) ScopedTiming _ScopedTiming_##BlockName(#BlockName)
+#define TimeFunction() ScopedTiming _ScopedTiming_##__func__(__func__)
 
 namespace Reference
 {

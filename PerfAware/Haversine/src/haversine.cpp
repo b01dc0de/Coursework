@@ -59,6 +59,8 @@ struct FileContentsT
 
 FileContentsT ReadFileContents(const char* FileName, bool bAppendZero)
 {
+    TimeFunction();
+
     FileContentsT Result = {};
 
     FILE* FileHandle = nullptr;
@@ -585,6 +587,7 @@ void JSONParseContext::ParseToken()
 
 JSONObject JSONParse(FileContentsT JSONContents)
 {
+    TimeFunction();
     if (JSONContents.Size == 0 || !JSONContents.Contents) { return JSONObject{}; }
 
     JSONParseContext Context;
@@ -652,84 +655,50 @@ void FreeJSONRoot(JSONObject* Root)
     *Root = {};
 }
 
-u64 Prof_Begin = 0;
-u64 Prof_ReadFile = 0;
-u64 Prof_Parse = 0;
-u64 Prof_Sum = 0;
-u64 Prof_Free = 0;
-u64 Prof_End = 0;
-
 double CalculateHaversineAverageFromJSON(const char* JSONFileName)
 {
-    Prof_Begin = ReadCPUTimer();
-
-    Prof_ReadFile = ReadCPUTimer();
+    TimeFunction();
     FileContentsT HvPairsFileText = ReadFileContents(JSONFileName, true);
 
-    Prof_Parse = ReadCPUTimer();
     JSONObject Root = JSONParse(HvPairsFileText);
-
-    double HaversineSum = 0.0;
     JSONObject* Pairs = Root.GetProperty("pairs");
-    Assert(Pairs && Pairs->Value.Type == JSONType_Array);
-
-    Prof_Sum = ReadCPUTimer();
-    for (int PairIdx = 0; PairIdx < Pairs->Value.List->Size; PairIdx++)
+    double HaversineSum = 0.0;
     {
-        JSONObject* Pair = Pairs->GetItem(PairIdx);
+        TimeBlock(Sum);
+        Assert(Pairs && Pairs->Value.Type == JSONType_Array);
 
-        JSONObject* X0 = Pair->GetProperty("X0");
-        JSONObject* Y0 = Pair->GetProperty("Y0");
-        JSONObject* X1 = Pair->GetProperty("X1");
-        JSONObject* Y1 = Pair->GetProperty("Y1");
+        for (int PairIdx = 0; PairIdx < Pairs->Value.List->Size; PairIdx++)
+        {
+            JSONObject* Pair = Pairs->GetItem(PairIdx);
 
-        Assert(X0 && Y0 && X1 && Y1);
-        Assert(X0->Value.Type == JSONType_NumberFloat && Y0->Value.Type == JSONType_NumberFloat &&
-            X1->Value.Type == JSONType_NumberFloat && Y1->Value.Type == JSONType_NumberFloat);
+            JSONObject* X0 = Pair->GetProperty("X0");
+            JSONObject* Y0 = Pair->GetProperty("Y0");
+            JSONObject* X1 = Pair->GetProperty("X1");
+            JSONObject* Y1 = Pair->GetProperty("Y1");
 
-        HaversineSum += Reference::CalculateHaversine(X0->GetFloat(), Y0->GetFloat(), X1->GetFloat(), Y1->GetFloat());
+            Assert(X0 && Y0 && X1 && Y1);
+            Assert(X0->Value.Type == JSONType_NumberFloat && Y0->Value.Type == JSONType_NumberFloat &&
+                X1->Value.Type == JSONType_NumberFloat && Y1->Value.Type == JSONType_NumberFloat);
+
+            HaversineSum += Reference::CalculateHaversine(X0->GetFloat(), Y0->GetFloat(), X1->GetFloat(), Y1->GetFloat());
+        }
     }
     double HaversineAvg = HaversineSum / Pairs->Value.List->Size;
 
-    Prof_Free = ReadCPUTimer();
-    FreeFileContents(&HvPairsFileText);
-    FreeJSONRoot(&Root);
-    Prof_End = ReadCPUTimer();
-
-    return HaversineAvg;
-}
-
-void PrintTimings()
-{
-    // NOTE(CKA): Code for PrintTimeElapsed is taken from
-    //      listing_0075_timed_haversine_main.cpp from PerfAware coursework
-    auto PrintTimeElapsed = [](char const* Label, u64 TotalTSCElapsed, u64 Begin, u64 End)
     {
-        u64 Elapsed = End - Begin;
-        f64 Percent = 100.0 * ((f64)Elapsed / (f64)TotalTSCElapsed);
-        printf("  %s: %llu (%.2f%%)\n", Label, Elapsed, Percent);
-    };
-
-    u64 TotalCPUElapsed = Prof_End - Prof_Begin;
-        
-    u64 CPUFreq = EstimateCPUTimerFreq();
-    if (CPUFreq)
-    {
-        printf("\nTotal time: %0.4fms (CPU freq %llu)\n", 1000.0 * (f64)TotalCPUElapsed / (f64)CPUFreq, CPUFreq);
+        TimeBlock(Free);
+        FreeFileContents(&HvPairsFileText);
+        FreeJSONRoot(&Root);
     }
 
-    PrintTimeElapsed("Startup", TotalCPUElapsed, Prof_Begin, Prof_ReadFile);
-    PrintTimeElapsed("ReadFile", TotalCPUElapsed, Prof_ReadFile, Prof_Parse);
-    PrintTimeElapsed("Parse", TotalCPUElapsed, Prof_Parse, Prof_Sum);
-    PrintTimeElapsed("Sum", TotalCPUElapsed, Prof_Sum, Prof_Free);
-    PrintTimeElapsed("Free", TotalCPUElapsed, Prof_Free, Prof_End);
+    return HaversineAvg;
 }
 
 int main(int ArgCount, const char** ArgValues)
 {
     (void)ArgCount; (void)ArgValues;
 
-    //EstimateCPUTimerFreq();
+    Perf::BeginProfiling();
 
     u32 TestSeeds[] = { 19854, 54285, 43745, 63179, 5897 };
     bool bCluster = true;
@@ -737,14 +706,14 @@ int main(int ArgCount, const char** ArgValues)
     u32 Num = 1000000;
     HaversineArgs Args = {};
     Args.Init(bCluster, Seed, Num);
-    constexpr bool bGenerate = true;
+    constexpr bool bGenerate = false;
     if (bGenerate) { Args.Generate(); }
 
     double HaversineAvg = CalculateHaversineAverageFromJSON(Args.FileName_PairsJSON);
     double Difference = HaversineAvg - Args.Average;
     fprintf(stdout, "Validation:\n\tCalculated average: %.16f\n\tDifference: %.16f\n", HaversineAvg, Difference);
 
-    PrintTimings();
+    Perf::EndProfiling();
 
     return 0;
 }

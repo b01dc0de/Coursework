@@ -163,8 +163,11 @@ u64 ReadOSTimer()
     return Timestamp.QuadPart;
 }
 
-// NOTE(CKA): Code for EstimateCPUTimerFreq is taken from
-//      listing_0073_cpu_timer_guessfreq_main.cpp from PerfAware coursework
+/*
+ * NOTE(CKA): The following code was adapted from reference code in
+ *      https://github.com/cmuratori/computer_enhance/blob/main/perfaware/part2/listing_0073_cpu_timer_guessfreq_main.cpp
+ *      as part of the Performance-Aware Programming Coursework available at https://www.computerenhance.com
+ */
 u64 EstimateCPUTimerFreq()
 {
     u64 MsToWait = 100;
@@ -205,6 +208,72 @@ u64 EstimateCPUTimerFreq()
 
     return CPUFreq;
 }
+
+ScopedTiming::ScopedTiming(const char* Name)
+{
+    ID = Perf::BeginTiming(Name);
+}
+
+ScopedTiming::~ScopedTiming()
+{
+    Perf::EndTiming(ID);
+}
+
+void Perf::BeginProfiling()
+{
+    Total = { "Total", ReadCPUTimer() };
+}
+
+void Perf::EndProfiling()
+{
+    Total.End = ReadCPUTimer();
+    PrintTimings();
+}
+
+u64 Perf::BeginTiming(const char* Name)
+{
+    Assert(Count < MaxBlockTimings);
+    Timings[Count] = { Name, ReadCPUTimer(), 0 };
+    return Count++;
+}
+
+void Perf::EndTiming(u64 ID)
+{
+    Assert(ID < Count && Timings[ID].Name && Timings[ID].Begin && !Timings[ID].End);
+    Timings[ID].End = ReadCPUTimer();
+}
+
+void Perf::PrintTimings()
+{
+    /*
+     * NOTE(CKA): The following code was adapted from reference code in
+     *      https://github.com/cmuratori/computer_enhance/blob/main/perfaware/part2/listing_0075_timed_haversine_main.cpp
+     *      as part of the Performance-Aware Programming Coursework available at https://www.computerenhance.com
+     */
+    auto PrintTimeElapsed = [](char const* Label, u64 TotalTSCElapsed, u64 Begin, u64 End)
+    {
+        u64 Elapsed = End - Begin;
+        f64 Percent = 100.0 * ((f64)Elapsed / (f64)TotalTSCElapsed);
+        printf("  %s: %llu (%.2f%%)\n", Label, Elapsed, Percent);
+    };
+
+    u64 TotalCPUElapsed = Timings[0].End - Timings[0].Begin;
+        
+    u64 CPUFreq = EstimateCPUTimerFreq();
+    if (CPUFreq)
+    {
+        printf("\nTotal time: %0.4fms (CPU freq %llu)\n", 1000.0 * (f64)TotalCPUElapsed / (f64)CPUFreq, CPUFreq);
+    }
+
+    for (u64 Idx = 0; Idx < Count; Idx++)
+    {
+        PrintTimeElapsed(Timings[Idx].Name, TotalCPUElapsed, Timings[Idx].Begin, Timings[Idx].End);
+    }
+}
+
+BlockTiming Perf::Total = {};
+BlockTiming Perf::Timings[] = {};
+u64 Perf::Count = 0;
 
 namespace Reference
 {
